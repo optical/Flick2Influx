@@ -1,0 +1,7 @@
+﻿version: '1.0.{build}'
+image: Visual Studio 2017
+before_build:
+  - cmd: dotnet --version
+  - cmd: dotnet restore Flick2Influx.csproj
+build_script:
+  - cmd: dotnet build Flick2Influx.sln

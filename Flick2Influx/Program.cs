@@ -8,7 +8,11 @@ using InfluxDB.Collector.Diagnostics;
 using MoreLinq;
 
 namespace Flick2Influx {
-	class Program {
+	public class Program {
+		private const string PriceMode = "price";
+		private const string UsageSimpleMode = "usage-simple";
+		private const string UsageDetailedMode = "usage-detailed";
+
 		public static void Main(string[] args) {
 			CommandLine.Parser.Default.ParseArguments<Config>(args)
 				.WithParsed(options => {
@@ -21,26 +25,25 @@ namespace Flick2Influx {
 					});
 
 					using (var influxCollector = collectorConfig.CreateCollector()) {
-						if (options.Mode.Equals("price", StringComparison.InvariantCultureIgnoreCase)) {
+						if (options.Mode.Equals(PriceMode, StringComparison.InvariantCultureIgnoreCase)) {
 							RecordCurrentPrice(options, influxCollector).GetAwaiter().GetResult();
-						} else if (options.Mode.Equals("usage", StringComparison.InvariantCultureIgnoreCase)) {
-							RecordHistoricUsage(options, influxCollector).GetAwaiter().GetResult();
+						} else if (options.Mode.Equals(UsageSimpleMode, StringComparison.InvariantCultureIgnoreCase)) {
+							RecordSimpleHistoricUsage(options, influxCollector).GetAwaiter().GetResult();
+						} else if (options.Mode.Equals(UsageDetailedMode, StringComparison.InvariantCultureIgnoreCase)) {
+							RecordDetailedHistoricUsage(options, influxCollector).GetAwaiter().GetResult();
 						} else {
-							Console.Error.WriteLine($"Unrecognized mode \"{options.Mode}\" A valid --mode of either \"price\" or \"usage\" must be specified");
+							Console.Error.WriteLine($"Unrecognized mode \"{options.Mode}\" A valid --mode of either \"{PriceMode}\", \"{UsageSimpleMode}\" or \"{UsageDetailedMode}\" must be specified");
 							Environment.Exit(1);
 						}
 					}
 				});
 		}
 
-		private static async Task RecordHistoricUsage(Config options, MetricsCollector influxCollector) {
-			if (options.LookBackDays <= 0) {
-				Console.Error.WriteLine("ERROR: If --mode is set to usage, --look-back-days must be specified");
-				Environment.Exit(1);
-			}
+		private static async Task RecordSimpleHistoricUsage(Config options, MetricsCollector influxCollector) {
+			VerifyLookbackSet(options);
 
 			var webClient = new FlickWebClient(options.Username, options.Password);
-			var powerUsage = await webClient.GetPowerUsage(DateTime.Now.Subtract(TimeSpan.FromDays(options.LookBackDays)), DateTime.Now);
+			var powerUsage = await webClient.GetPowerUsage(DateTime.Now.Subtract(TimeSpan.FromDays(options.LookBackDays)), DateTime.Now).ConfigureAwait(false);
 
 			foreach (var usageBucket in powerUsage) {
 				var fields = new Dictionary<string, object> {
@@ -51,6 +54,39 @@ namespace Flick2Influx {
 			}
 
 			Console.WriteLine($"Finished recording {powerUsage.Count} power usage buckets");
+		}
+
+		private static void VerifyLookbackSet(Config options) {
+			if (options.LookBackDays <= 0) {
+				Console.Error.WriteLine("ERROR: If --mode is set to a form of usage, --look-back-days must be specified");
+				Environment.Exit(1);
+			}
+		}
+
+		private static async Task RecordDetailedHistoricUsage(Config options, MetricsCollector influxCollector) {
+			VerifyLookbackSet(options);
+
+			var client = new FlickWebClient(options.Username, options.Password);
+			for (var lookback = options.LookBackDays; lookback >= 0; lookback--) {
+				var date = DateTime.Now.AddDays(-lookback);
+				try {
+					Console.WriteLine($"Fetching detailed power usage for {date.Date}");
+					var powerUsage = await client.FetchDetailedUsageForDay(date).ConfigureAwait(false);
+
+					foreach (var powerAndPriceInterval in powerUsage) {
+						var fields = new Dictionary<string, object> {
+							["price"] = powerAndPriceInterval.Price,
+							["units"] = powerAndPriceInterval.Units,
+							["total_cost"] = powerAndPriceInterval.Units * powerAndPriceInterval.Price
+						};
+
+						influxCollector.Write("DetailedPowerUsage", fields, timestamp: powerAndPriceInterval.Start.ToUniversalTime());
+					}
+
+				} catch (Exception exception) {
+					Console.WriteLine($"Skipping {date} due to an exception {exception}");
+				}
+			}
 		}
 
 		private static async Task RecordCurrentPrice(Config options, MetricsCollector influxCollector) {

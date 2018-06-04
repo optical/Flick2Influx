@@ -21,7 +21,7 @@ namespace Flick2Influx {
 		[Option("influx-password", HelpText = "Optional - The password corresponding to the influx username when recording stats")]
 		public string InfluxPassword { get; set; }
 
-		[Option('m', "mode", Required = true, HelpText = "The mode of operation. Values are either \"Price\" for current pricing or \"Usage\" for historic data usage")]
+		[Option('m', "mode", Required = true, HelpText = "The mode of operation. Values are either \"price\" for current pricing, \"usage-simple\" for usage data without pricing, or \"usage-detailed\" for a breakdown of usage, including the price paid")]
 		public string Mode { get; set; }
 
 		[Option("look-back-days", HelpText = "For the historic usage mode. How many days from now to look back and pump into influx")]

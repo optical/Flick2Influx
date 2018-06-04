@@ -19,7 +19,7 @@
 
   <ItemGroup>
     <PackageReference Include="CommandLineParser" Version="2.2.1" />
-    <PackageReference Include="FlickElectricSharp" Version="0.1.0" />
+    <PackageReference Include="FlickElectricSharp" Version="0.2.0" />
     <PackageReference Include="InfluxDB.Collector" Version="1.1.0" />
     <PackageReference Include="morelinq" Version="2.10.0" />
     <PackageReference Include="Newtonsoft.Json" Version="11.0.2" />
